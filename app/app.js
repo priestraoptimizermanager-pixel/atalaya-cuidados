@@ -713,10 +713,26 @@ async function syncNow() {
       cache: "no-store",
     });
 
+    if (remote.status === 401) {
+      ids.syncStatus.textContent = "No se pudo sincronizar: el código privado no coincide o falta configurar SYNC_TOKEN_HASH en Easypanel.";
+      return;
+    }
+    if (!remote.ok) {
+      ids.syncStatus.textContent = `No se pudo sincronizar: el servidor respondió ${remote.status}.`;
+      return;
+    }
+
     if (remote.ok) {
       const payload = await remote.json();
       if (payload?.encrypted) {
-        const remoteState = normalizeState(await decryptJson(familyKey, payload.encrypted));
+        let remoteState;
+        try {
+          remoteState = normalizeState(await decryptJson(familyKey, payload.encrypted));
+        } catch {
+          ids.syncStatus.textContent =
+            "No se pudo sincronizar: los datos del servidor no se pueden abrir con esta clave familiar.";
+          return;
+        }
         state = mergeStates(state, remoteState);
         await persist();
       }
@@ -732,13 +748,25 @@ async function syncNow() {
       body: JSON.stringify({ action: "push", app: "cuidados-mama", version: 2, encrypted }),
     });
 
+    if (pushed.status === 401) {
+      ids.syncStatus.textContent = "No se pudo sincronizar: el código privado no coincide o falta configurar SYNC_TOKEN_HASH en Easypanel.";
+      return;
+    }
     if (pushed.status === 409) {
       const conflict = await pushed.json();
       if (conflict?.current?.encrypted) {
-        state = mergeStates(state, normalizeState(await decryptJson(familyKey, conflict.current.encrypted)));
+        let conflictState;
+        try {
+          conflictState = normalizeState(await decryptJson(familyKey, conflict.current.encrypted));
+        } catch {
+          ids.syncStatus.textContent =
+            "No se pudo sincronizar: los datos del servidor no se pueden abrir con esta clave familiar.";
+          return;
+        }
+        state = mergeStates(state, conflictState);
         await persist();
         const retryEncrypted = await encryptJson(familyKey, state);
-        await fetch(syncUrl, {
+        const retry = await fetch(syncUrl, {
           method: "POST",
           headers: {
             Authorization: `Bearer ${syncToken}`,
@@ -746,13 +774,21 @@ async function syncNow() {
           },
           body: JSON.stringify({ action: "push", app: "cuidados-mama", version: 2, encrypted: retryEncrypted }),
         });
+        if (!retry.ok) {
+          ids.syncStatus.textContent = `No se pudo sincronizar: el servidor respondió ${retry.status}.`;
+          return;
+        }
       }
+    }
+    if (!pushed.ok && pushed.status !== 409) {
+      ids.syncStatus.textContent = `No se pudo sincronizar: el servidor respondió ${pushed.status}.`;
+      return;
     }
 
     ids.syncStatus.textContent = `Sincronizado: ${new Date().toLocaleString("es-ES")}`;
     render();
-  } catch {
-    ids.syncStatus.textContent = "No se pudo sincronizar. Revisa la dirección privada y el código.";
+  } catch (error) {
+    ids.syncStatus.textContent = `No se pudo sincronizar: ${error.message || "fallo de conexión"}.`;
   }
 }
 

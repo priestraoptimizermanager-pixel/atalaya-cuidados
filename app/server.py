@@ -33,6 +33,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if self.path == "/health":
             self.send_json({"ok": True})
             return
+        if self.path == "/api/sync/status":
+            self.send_json({"ok": True, "configured": bool(SYNC_TOKEN_HASH), "hasData": DATA_FILE.exists()})
+            return
         return super().do_GET()
 
     def do_POST(self):
