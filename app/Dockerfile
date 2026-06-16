@@ -1,6 +1,6 @@
 FROM python:3.12-slim
 
-WORKDIR /app
+WORKDIR /app/app
 COPY . /app
 
 ENV PORT=8080
