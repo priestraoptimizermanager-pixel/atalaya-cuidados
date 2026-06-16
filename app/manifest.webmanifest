@@ -1,0 +1,19 @@
+{
+  "name": "Atalaya Labs · Cuidados de Mama",
+  "short_name": "Atalaya Cuidados",
+  "description": "Agenda privada de citas medicas y horas de cuidadora creada por Atalaya Labs.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#F7F4EE",
+  "theme_color": "#1E3A5F",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

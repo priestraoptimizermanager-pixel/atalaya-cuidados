@@ -1,0 +1,12 @@
+services:
+  atalaya-cuidados:
+    build: ./app
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      SYNC_TOKEN_HASH: "fb612a55718b01cee088f606954507cd7577c6f5cef182afd20a94e2cb8d7ca8"
+    volumes:
+      - atalaya-cuidados-data:/data
+
+volumes:
+  atalaya-cuidados-data:

@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Atalaya Labs · Cuidados de Mamá</title>
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self' https:; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+    />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#1E3A5F" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Atalaya Cuidados" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <section class="lock-screen" id="lockScreen" aria-label="Acceso protegido">
+      <form class="lock-box" id="unlockForm">
+        <p class="eyebrow">Atalaya Labs</p>
+        <h1 id="lockTitle">Clave familiar</h1>
+        <p id="lockText">Crea una clave compartida. Los datos se guardarán cifrados en este dispositivo.</p>
+        <label>
+          Clave
+          <input id="familyPassword" type="password" minlength="8" autocomplete="current-password" required />
+        </label>
+        <label id="confirmPasswordWrap">
+          Repetir clave
+          <input id="confirmFamilyPassword" type="password" minlength="8" autocomplete="new-password" />
+        </label>
+        <button class="primary" type="submit" id="unlockButton">Entrar</button>
+        <p class="fineprint" id="lockHint">Si se pierde la clave, no se podrán recuperar los datos cifrados.</p>
+      </form>
+    </section>
+
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Atalaya Labs</p>
+        <h1>Cuidados de Mamá</h1>
+      </div>
+      <div class="top-actions">
+        <button class="icon-button" id="exportData" title="Exportar datos" type="button" aria-label="Exportar datos">
+          <span aria-hidden="true">↓</span>
+        </button>
+        <label class="icon-button file-action" title="Importar datos" aria-label="Importar datos">
+          <span aria-hidden="true">↑</span>
+          <input id="importData" type="file" accept="application/json" />
+        </label>
+        <button class="icon-button" id="printPage" title="Imprimir resumen" type="button" aria-label="Imprimir resumen">
+          <span aria-hidden="true">⌁</span>
+        </button>
+        <button class="icon-button" id="lockApp" title="Bloquear app" type="button" aria-label="Bloquear app">
+          <span aria-hidden="true">□</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="summary-strip" aria-label="Resumen">
+        <div>
+          <span>Próxima cita</span>
+          <strong id="nextAppointment">Sin citas</strong>
+        </div>
+        <div>
+          <span>Horas del mes</span>
+          <strong id="monthHours">0 h</strong>
+        </div>
+        <div>
+          <span>Pendiente del mes</span>
+          <strong id="monthTotal">0,00 €</strong>
+        </div>
+      </section>
+
+      <nav class="tabs" aria-label="Secciones">
+        <button class="tab active" type="button" data-tab="appointments">Citas médicas</button>
+        <button class="tab" type="button" data-tab="care">Cuidadora</button>
+        <button class="tab" type="button" data-tab="monthly">Resumen mensual</button>
+        <button class="tab" type="button" data-tab="settings">Ajustes</button>
+      </nav>
+
+      <section class="panel active" id="appointments">
+        <form class="entry-form" id="appointmentForm">
+          <input type="hidden" id="appointmentId" />
+          <label>
+            Fecha
+            <input id="appointmentDate" type="date" required />
+          </label>
+          <label>
+            Hora
+            <input id="appointmentTime" type="time" required />
+          </label>
+          <label>
+            Ambulancia
+            <input id="appointmentAmbulanceTime" type="time" />
+          </label>
+          <label>
+            Especialidad
+            <input id="appointmentSpecialty" type="text" placeholder="Cardiología" required />
+          </label>
+          <label>
+            Médico o centro
+            <input id="appointmentPlace" type="text" placeholder="Hospital / consulta" />
+          </label>
+          <label class="wide">
+            Notas
+            <textarea id="appointmentNotes" rows="2" placeholder="Dirección, preparación, pruebas, acompañante..."></textarea>
+          </label>
+          <div class="form-actions wide">
+            <button class="primary" type="submit">Guardar cita</button>
+            <button class="secondary" id="clearAppointmentForm" type="button">Limpiar</button>
+          </div>
+        </form>
+        <div class="list-header">
+          <h2>Citas guardadas</h2>
+          <select id="appointmentFilter" aria-label="Filtro de citas">
+            <option value="upcoming">Próximas</option>
+            <option value="historyYear">Historial último año</option>
+            <option value="all">Todas</option>
+          </select>
+        </div>
+        <div class="item-list" id="appointmentList"></div>
+      </section>
+
+      <section class="panel" id="care">
+        <form class="entry-form" id="careForm">
+          <input type="hidden" id="careId" />
+          <label>
+            Fecha
+            <input id="careDate" type="date" required />
+          </label>
+          <label>
+            Entrada
+            <input id="careStart" type="time" required />
+          </label>
+          <label>
+            Salida
+            <input id="careEnd" type="time" required />
+          </label>
+          <label>
+            Precio por hora
+            <input id="careRate" type="number" min="0" step="0.01" required />
+          </label>
+          <label class="wide">
+            Notas
+            <textarea id="careNotes" rows="2" placeholder="Tareas, incidencias, cambios de horario..."></textarea>
+          </label>
+          <label class="check wide">
+            <input id="carePaid" type="checkbox" />
+            Marcado como pagado
+          </label>
+          <div class="form-actions wide">
+            <button class="primary" type="submit">Guardar horas</button>
+            <button class="secondary" id="clearCareForm" type="button">Limpiar</button>
+          </div>
+        </form>
+        <div class="list-header">
+          <h2>Horas registradas</h2>
+          <div class="inline-controls">
+            <input id="careMonthFilter" type="month" aria-label="Mes de cuidadora" />
+            <select id="careStatusFilter" aria-label="Estado de pago">
+              <option value="pending">Pendientes</option>
+              <option value="paid">Historial pagadas</option>
+              <option value="all">Todas</option>
+            </select>
+          </div>
+        </div>
+        <div class="item-list" id="careList"></div>
+      </section>
+
+      <section class="panel" id="monthly">
+        <div class="month-tools">
+          <label>
+            Mes
+            <input id="summaryMonth" type="month" />
+          </label>
+        </div>
+        <div class="monthly-grid">
+          <article class="metric">
+            <span>Horas trabajadas</span>
+            <strong id="summaryHours">0 h</strong>
+          </article>
+          <article class="metric">
+            <span>Importe total</span>
+            <strong id="summaryTotal">0,00 €</strong>
+          </article>
+          <article class="metric">
+            <span>Pendiente de pago</span>
+            <strong id="summaryPending">0,00 €</strong>
+          </article>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Horario</th>
+                <th>Horas</th>
+                <th>Precio/h</th>
+                <th>Importe</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="summaryRows"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" id="settings">
+        <form class="entry-form compact" id="settingsForm">
+          <label>
+            Nombre de la cuidadora
+            <input id="caregiverName" type="text" placeholder="Cuidadora" />
+          </label>
+          <label>
+            Precio habitual por hora
+            <input id="defaultRate" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            Dirección privada de sincronización
+            <input id="syncUrl" type="url" placeholder="https://..." autocomplete="off" />
+          </label>
+          <label>
+            Código privado de sincronización
+            <input id="syncToken" type="password" autocomplete="off" />
+          </label>
+          <div class="form-actions wide">
+            <button class="primary" type="submit">Guardar ajustes</button>
+            <button class="secondary" id="syncNow" type="button">Sincronizar ahora</button>
+          </div>
+        </form>
+        <div class="security-note">
+          <strong id="syncStatus">Sincronización privada no configurada.</strong>
+          <span>Para que dos móviles se actualicen solos hace falta conectar esta app a un servicio privado.</span>
+        </div>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">
+        <strong>No hay datos todavía</strong>
+        <span>Cuando guardes información aparecerá aquí.</span>
+      </div>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
