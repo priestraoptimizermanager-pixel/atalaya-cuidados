@@ -1,4 +1,4 @@
-const CACHE_NAME = "cuidados-mama-v3";
+const CACHE_NAME = "cuidados-mama-v4";
 const APP_FILES = [
   "./",
   "./index.html",
