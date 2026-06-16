@@ -259,6 +259,24 @@ textarea {
   padding: 11px 12px;
 }
 
+.password-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+
+.password-field input {
+  min-width: 0;
+}
+
+.password-toggle {
+  min-width: 58px;
+  border: 1px solid var(--line);
+  background: var(--soft);
+  color: var(--brand-dark);
+  padding: 10px 12px;
+}
+
 textarea {
   resize: vertical;
 }

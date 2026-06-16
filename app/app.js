@@ -91,8 +91,22 @@ setup();
 
 function setup() {
   document.body.classList.add("locked");
+  setupPasswordToggles();
   setupLockScreen();
   registerServiceWorker();
+}
+
+function setupPasswordToggles() {
+  document.querySelectorAll("[data-toggle-password]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const input = document.querySelector(`#${button.dataset.togglePassword}`);
+      if (!input) return;
+      const visible = input.type === "text";
+      input.type = visible ? "password" : "text";
+      button.textContent = visible ? "Ver" : "Ocultar";
+      button.setAttribute("aria-label", visible ? "Mostrar caracteres" : "Ocultar caracteres");
+    });
+  });
 }
 
 function setupApp() {
@@ -191,6 +205,7 @@ async function saveAppointment(event) {
     specialty: ids.appointmentSpecialty.value.trim(),
     place: ids.appointmentPlace.value.trim(),
     notes: ids.appointmentNotes.value.trim(),
+    updatedAt: new Date().toISOString(),
   };
 
   state.appointments = upsert(state.appointments, entry);
@@ -210,6 +225,7 @@ async function saveCareEntry(event) {
     rate: Number(ids.careRate.value || 0),
     notes: ids.careNotes.value.trim(),
     paid: ids.carePaid.checked,
+    updatedAt: new Date().toISOString(),
   };
 
   state.careEntries = upsert(state.careEntries, entry);
@@ -244,7 +260,7 @@ function renderAppointments() {
   const today = startOfDay(new Date());
   const oneYearAgo = addYears(today, -1);
   const filter = ids.appointmentFilter.value;
-  let appointments = [...state.appointments].sort((a, b) => appointmentDate(a) - appointmentDate(b));
+  let appointments = activeItems(state.appointments).sort((a, b) => appointmentDate(a) - appointmentDate(b));
 
   if (filter === "upcoming") {
     appointments = appointments.filter((item) => appointmentDate(item) >= today);
@@ -365,7 +381,7 @@ function renderSummary() {
 
 function renderTopSummary() {
   const today = startOfDay(new Date());
-  const next = [...state.appointments]
+  const next = activeItems(state.appointments)
     .filter((item) => appointmentDate(item) >= today)
     .sort((a, b) => appointmentDate(a) - appointmentDate(b))[0];
   const totals = calculateTotals(entriesForMonth(toMonthValue(new Date())));
@@ -405,7 +421,9 @@ function editCareEntry(id) {
 
 async function deleteAppointment(id) {
   if (!confirm("¿Borrar esta cita?")) return;
-  state.appointments = state.appointments.filter((entry) => entry.id !== id);
+  state.appointments = state.appointments.map((entry) =>
+    entry.id === id ? { ...entry, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : entry,
+  );
   await persist();
   autoSync();
   render();
@@ -413,14 +431,18 @@ async function deleteAppointment(id) {
 
 async function deleteCareEntry(id) {
   if (!confirm("¿Borrar este registro de horas?")) return;
-  state.careEntries = state.careEntries.filter((entry) => entry.id !== id);
+  state.careEntries = state.careEntries.map((entry) =>
+    entry.id === id ? { ...entry, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : entry,
+  );
   await persist();
   autoSync();
   render();
 }
 
 async function markCareEntryPaid(id) {
-  state.careEntries = state.careEntries.map((entry) => (entry.id === id ? { ...entry, paid: true } : entry));
+  state.careEntries = state.careEntries.map((entry) =>
+    entry.id === id ? { ...entry, paid: true, updatedAt: new Date().toISOString() } : entry,
+  );
   await persist();
   autoSync();
   render();
@@ -440,7 +462,11 @@ function resetCareForm() {
 }
 
 function entriesForMonth(month) {
-  return state.careEntries.filter((entry) => entry.date.startsWith(month));
+  return activeItems(state.careEntries).filter((entry) => entry.date.startsWith(month));
+}
+
+function activeItems(items) {
+  return items.filter((entry) => !entry.deletedAt);
 }
 
 function calculateTotals(entries) {
@@ -563,6 +589,8 @@ function normalizeAppointment(item) {
     specialty: cleanText(item.specialty, 120),
     place: cleanText(item.place, 180),
     notes: cleanText(item.notes, 1200),
+    updatedAt: cleanIsoDate(item.updatedAt),
+    deletedAt: cleanIsoDate(item.deletedAt),
   };
 }
 
@@ -575,6 +603,8 @@ function normalizeCareEntry(item) {
     rate: cleanNumber(item.rate),
     notes: cleanText(item.notes, 1200),
     paid: Boolean(item.paid),
+    updatedAt: cleanIsoDate(item.updatedAt),
+    deletedAt: cleanIsoDate(item.deletedAt),
   };
 }
 
@@ -600,6 +630,11 @@ function cleanNumber(value) {
 
 function cleanText(value, maxLength) {
   return String(value || "").trim().slice(0, maxLength);
+}
+
+function cleanIsoDate(value) {
+  const text = cleanText(value, 40);
+  return Number.isNaN(Date.parse(text)) ? "" : text;
 }
 
 async function deriveKey(password) {
@@ -668,14 +703,13 @@ async function syncNow() {
 
   try {
     ids.syncStatus.textContent = "Sincronizando...";
-    const encrypted = await encryptJson(familyKey, state);
     const remote = await fetch(syncUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${syncToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ action: "pull", localUpdatedAt: encrypted.updatedAt }),
+      body: JSON.stringify({ action: "pull" }),
       cache: "no-store",
     });
 
@@ -683,14 +717,13 @@ async function syncNow() {
       const payload = await remote.json();
       if (payload?.encrypted) {
         const remoteState = normalizeState(await decryptJson(familyKey, payload.encrypted));
-        if (new Date(payload.encrypted.updatedAt || 0) > new Date(localUpdatedAt())) {
-          state = remoteState;
-          await persist();
-        }
+        state = mergeStates(state, remoteState);
+        await persist();
       }
     }
 
-    await fetch(syncUrl, {
+    const encrypted = await encryptJson(familyKey, state);
+    const pushed = await fetch(syncUrl, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${syncToken}`,
@@ -698,6 +731,23 @@ async function syncNow() {
       },
       body: JSON.stringify({ action: "push", app: "cuidados-mama", version: 2, encrypted }),
     });
+
+    if (pushed.status === 409) {
+      const conflict = await pushed.json();
+      if (conflict?.current?.encrypted) {
+        state = mergeStates(state, normalizeState(await decryptJson(familyKey, conflict.current.encrypted)));
+        await persist();
+        const retryEncrypted = await encryptJson(familyKey, state);
+        await fetch(syncUrl, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${syncToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ action: "push", app: "cuidados-mama", version: 2, encrypted: retryEncrypted }),
+        });
+      }
+    }
 
     ids.syncStatus.textContent = `Sincronizado: ${new Date().toLocaleString("es-ES")}`;
     render();
@@ -717,6 +767,34 @@ function localUpdatedAt() {
   } catch {
     return "1970-01-01T00:00:00.000Z";
   }
+}
+
+function mergeStates(localState, remoteState) {
+  return normalizeState({
+    settings: {
+      ...remoteState.settings,
+      ...localState.settings,
+      syncUrl: localState.settings.syncUrl || remoteState.settings.syncUrl,
+      syncToken: localState.settings.syncToken || remoteState.settings.syncToken,
+    },
+    appointments: mergeById(localState.appointments, remoteState.appointments),
+    careEntries: mergeById(localState.careEntries, remoteState.careEntries),
+  });
+}
+
+function mergeById(localItems, remoteItems) {
+  const merged = new Map();
+  [...remoteItems, ...localItems].forEach((item) => {
+    const previous = merged.get(item.id);
+    if (!previous || itemTimestamp(item) >= itemTimestamp(previous)) {
+      merged.set(item.id, item);
+    }
+  });
+  return [...merged.values()];
+}
+
+function itemTimestamp(item) {
+  return Date.parse(item.updatedAt || item.deletedAt || "1970-01-01T00:00:00.000Z") || 0;
 }
 
 function lockApp() {
