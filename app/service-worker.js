@@ -1,4 +1,4 @@
-const CACHE_NAME = "cuidados-mama-v10";
+const CACHE_NAME = "cuidados-mama-v14";
 const APP_FILES = [
   "./",
   "./index.html",
@@ -6,6 +6,9 @@ const APP_FILES = [
   "./app.js",
   "./manifest.webmanifest",
   "./icon.svg",
+  "./icon-192.png",
+  "./icon-512.png",
+  "./apple-touch-icon.png",
 ];
 
 self.addEventListener("install", (event) => {
