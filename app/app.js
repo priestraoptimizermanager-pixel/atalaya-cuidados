@@ -71,8 +71,13 @@ const ids = {
   medicationList: document.querySelector("#medicationList"),
   medicationFilter: document.querySelector("#medicationFilter"),
   clearMedicationForm: document.querySelector("#clearMedicationForm"),
+  summaryType: document.querySelector("#summaryType"),
   summaryMonth: document.querySelector("#summaryMonth"),
+  summaryHead: document.querySelector("#summaryHead"),
   summaryRows: document.querySelector("#summaryRows"),
+  summaryMetricOneLabel: document.querySelector("#summaryMetricOneLabel"),
+  summaryMetricTwoLabel: document.querySelector("#summaryMetricTwoLabel"),
+  summaryMetricThreeLabel: document.querySelector("#summaryMetricThreeLabel"),
   summaryHours: document.querySelector("#summaryHours"),
   summaryTotal: document.querySelector("#summaryTotal"),
   summaryPending: document.querySelector("#summaryPending"),
@@ -150,15 +155,13 @@ function setupApp() {
   ids.careMonthFilter.addEventListener("change", render);
   ids.careStatusFilter.addEventListener("change", render);
   ids.medicationFilter.addEventListener("change", render);
+  ids.summaryType.addEventListener("change", render);
   ids.summaryMonth.addEventListener("change", render);
   ids.exportData.addEventListener("click", exportData);
   ids.importData.addEventListener("change", importData);
   ids.lockApp.addEventListener("click", lockApp);
   ids.syncNow.addEventListener("click", syncNow);
-  ids.printPage.addEventListener("click", () => {
-    activateTab("monthly");
-    window.print();
-  });
+  ids.printPage.addEventListener("click", () => window.print());
 
   render();
   document.body.classList.remove("locked");
@@ -501,17 +504,35 @@ function renderCareEntries() {
 }
 
 function renderSummary() {
+  if (ids.summaryType.value === "appointments") {
+    renderAppointmentSummary();
+    return;
+  }
+  if (ids.summaryType.value === "medication") {
+    renderMedicationMonthlySummary();
+    return;
+  }
+  renderCareSummary();
+}
+
+function renderCareSummary() {
   const entries = entriesForMonth(ids.summaryMonth.value).sort((a, b) => new Date(a.date) - new Date(b.date));
   const totals = calculateTotals(entries);
-  ids.summaryHours.textContent = formatHours(totals.hours);
-  ids.summaryTotal.textContent = money.format(totals.total);
-  ids.summaryPending.textContent = money.format(totals.pending);
+  setSummaryMetrics("Horas trabajadas", formatHours(totals.hours), "Importe total", money.format(totals.total), "Pendiente de pago", money.format(totals.pending));
+  ids.summaryHead.innerHTML = `
+    <tr>
+      <th>Fecha</th>
+      <th>Horario</th>
+      <th>Horas</th>
+      <th>Precio/h</th>
+      <th>Importe</th>
+      <th>Estado</th>
+    </tr>
+  `;
   ids.summaryRows.innerHTML = "";
 
   if (!entries.length) {
-    const row = document.createElement("tr");
-    row.innerHTML = '<td colspan="6">No hay horas registradas en este mes.</td>';
-    ids.summaryRows.append(row);
+    appendSummaryEmpty("No hay horas registradas en este mes.", 6);
     return;
   }
 
@@ -528,6 +549,98 @@ function renderSummary() {
     `;
     ids.summaryRows.append(row);
   });
+}
+
+function renderAppointmentSummary() {
+  const month = ids.summaryMonth.value;
+  const appointments = activeItems(state.appointments)
+    .filter((entry) => entry.date.startsWith(month))
+    .sort((a, b) => appointmentDate(a) - appointmentDate(b));
+  const ambulanceCount = appointments.filter((entry) => entry.ambulanceTime).length;
+  const specialties = new Set(appointments.map((entry) => entry.specialty).filter(Boolean));
+  setSummaryMetrics("Citas del mes", String(appointments.length), "Especialidades", String(specialties.size), "Con ambulancia", String(ambulanceCount));
+  ids.summaryHead.innerHTML = `
+    <tr>
+      <th>Fecha</th>
+      <th>Hora</th>
+      <th>Ambulancia</th>
+      <th>Especialidad</th>
+      <th>Centro</th>
+      <th>Notas</th>
+    </tr>
+  `;
+  ids.summaryRows.innerHTML = "";
+
+  if (!appointments.length) {
+    appendSummaryEmpty("No hay citas médicas en este mes.", 6);
+    return;
+  }
+
+  appointments.forEach((entry) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${escapeHtml(formatDate(entry.date))}</td>
+      <td>${escapeHtml(entry.time)}</td>
+      <td>${escapeHtml(entry.ambulanceTime || "-")}</td>
+      <td>${escapeHtml(entry.specialty)}</td>
+      <td>${escapeHtml(entry.place || "-")}</td>
+      <td>${escapeHtml(entry.notes || "-")}</td>
+    `;
+    ids.summaryRows.append(row);
+  });
+}
+
+function renderMedicationMonthlySummary() {
+  const activeMedications = activeItems(state.medications)
+    .filter((entry) => !entry.endedAt)
+    .sort((a, b) => medicationSortValue(a) - medicationSortValue(b) || a.name.localeCompare(b.name, "es"));
+  const timed = activeMedications.filter((entry) => entry.time).length;
+  const momentsUsed = new Set(activeMedications.map((entry) => entry.moment)).size;
+  setSummaryMetrics("Medicamentos activos", String(activeMedications.length), "Tomas al día", String(activeMedications.length), "Con hora concreta", String(timed));
+  ids.summaryHead.innerHTML = `
+    <tr>
+      <th>Momento</th>
+      <th>Hora</th>
+      <th>Medicamento</th>
+      <th>Pastillas</th>
+      <th>Notas</th>
+      <th>Con hora</th>
+    </tr>
+  `;
+  ids.summaryRows.innerHTML = "";
+
+  if (!activeMedications.length) {
+    appendSummaryEmpty("No hay medicación activa.", 6);
+    return;
+  }
+
+  activeMedications.forEach((entry) => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td>${escapeHtml(formatMedicationMomentLabel(entry.moment))}</td>
+      <td>${escapeHtml(entry.time || "-")}</td>
+      <td>${escapeHtml(entry.name)}</td>
+      <td>${escapeHtml(formatPills(entry.pills))}</td>
+      <td>${escapeHtml(entry.notes || "-")}</td>
+      <td>${entry.time ? "Sí" : "No"}</td>
+    `;
+    ids.summaryRows.append(row);
+  });
+}
+
+function setSummaryMetrics(labelOne, valueOne, labelTwo, valueTwo, labelThree, valueThree) {
+  ids.summaryMetricOneLabel.textContent = labelOne;
+  ids.summaryHours.textContent = valueOne;
+  ids.summaryMetricTwoLabel.textContent = labelTwo;
+  ids.summaryTotal.textContent = valueTwo;
+  ids.summaryMetricThreeLabel.textContent = labelThree;
+  ids.summaryPending.textContent = valueThree;
+}
+
+function appendSummaryEmpty(message, columns) {
+  const row = document.createElement("tr");
+  row.innerHTML = `<td colspan="${columns}">${escapeHtml(message)}</td>`;
+  ids.summaryRows.append(row);
 }
 
 function renderTopSummary() {
@@ -1215,8 +1328,13 @@ function formatPills(value) {
 }
 
 function formatMedicationMoment(item) {
+  const label = formatMedicationMomentLabel(item.moment);
+  return item.time ? `${label} · ${item.time}` : label;
+}
+
+function formatMedicationMomentLabel(value) {
   const labels = Object.fromEntries(medicationMoments().map((moment) => [moment.value, moment.label]));
-  return item.time ? `${labels[item.moment] || "Hora"} · ${item.time}` : labels[item.moment] || "Desayuno";
+  return labels[value] || "Desayuno";
 }
 
 function medicationMoments() {

@@ -817,10 +817,9 @@ tr:last-child td {
   .top-actions,
   .tabs,
   .entry-form,
-  .list-header,
-  #appointments,
-  #care,
-  #medication,
+  .list-header select,
+  .list-header input,
+  .inline-controls,
   #settings {
     display: none !important;
   }
@@ -829,11 +828,41 @@ tr:last-child td {
     background: #fff;
   }
 
-  .layout {
-    width: 100%;
+  .topbar {
+    padding: 0 0 14px;
   }
 
-  #monthly {
+  .layout {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  .panel {
+    display: none !important;
+  }
+
+  .panel.active {
     display: block !important;
+  }
+
+  .summary-strip,
+  .record,
+  .metric,
+  .table-wrap,
+  .medication-table {
+    box-shadow: none;
+  }
+
+  .record {
+    break-inside: avoid;
+  }
+
+  .record-actions {
+    display: none !important;
+  }
+
+  .medication-table {
+    overflow: visible;
   }
 }
