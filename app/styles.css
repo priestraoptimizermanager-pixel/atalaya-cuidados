@@ -287,16 +287,20 @@ textarea {
 }
 
 .password-field {
-  display: grid;
-  grid-template-columns: 1fr auto;
+  align-items: stretch;
+  display: flex;
   gap: 8px;
+  width: 100%;
 }
 
 .password-field input {
+  flex: 1 1 auto;
   min-width: 0;
+  width: auto;
 }
 
 .password-toggle {
+  flex: 0 0 auto;
   min-width: 58px;
   border: 1px solid var(--line);
   background: var(--soft);
@@ -695,7 +699,7 @@ tr:last-child td {
   }
 
   .password-field {
-    grid-template-columns: minmax(0, 1fr) auto;
+    display: flex;
   }
 
   .password-toggle {
