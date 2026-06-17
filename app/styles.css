@@ -150,6 +150,16 @@ h2 {
   line-height: 1;
 }
 
+.icon-button svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .icon-button:hover,
 .tab:hover,
 button:hover {
@@ -323,6 +333,17 @@ button {
   padding: 11px 16px;
 }
 
+.button-link {
+  align-items: center;
+  border-radius: 8px;
+  display: inline-flex;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 42px;
+  padding: 10px 13px;
+  text-decoration: none;
+}
+
 .primary {
   background: var(--accent);
   color: #fff;
@@ -406,6 +427,39 @@ button {
 .record-notes {
   color: var(--muted);
   line-height: 1.45;
+}
+
+.map-card {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding: 12px;
+}
+
+.map-card div:first-child {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.map-card strong {
+  color: var(--brand-dark);
+  font-size: 0.9rem;
+}
+
+.map-card span {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.map-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
 }
 
 .record-actions {
@@ -500,6 +554,11 @@ tr:last-child td {
     font-size: 0.95rem;
   }
 
+  .icon-button svg {
+    width: 19px;
+    height: 19px;
+  }
+
   h1 {
     font-size: 1.85rem;
   }
@@ -575,7 +634,20 @@ tr:last-child td {
   }
 
   .record-actions {
+    display: grid;
+    grid-template-columns: 1fr;
     justify-content: flex-start;
+  }
+
+  .record-actions button {
+    width: 100%;
+  }
+
+  .map-card,
+  .map-actions {
+    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr;
   }
 
   .tabs {
@@ -617,7 +689,8 @@ tr:last-child td {
   input,
   select,
   textarea,
-  button {
+  button,
+  .button-link {
     min-height: 46px;
   }
 
@@ -666,6 +739,7 @@ tr:last-child td {
   .list-header,
   #appointments,
   #care,
+  #medication,
   #settings {
     display: none !important;
   }

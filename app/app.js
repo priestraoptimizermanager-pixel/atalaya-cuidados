@@ -1,6 +1,9 @@
 const STORAGE_KEY = "mama-care-app-v1";
 const SECURE_META_KEY = "mama-care-secure-meta-v2";
 const SECURE_DATA_KEY = "mama-care-secure-data-v2";
+const REMEMBER_DB_NAME = "mama-care-remembered-session-v1";
+const REMEMBER_STORE_NAME = "keys";
+const REMEMBER_KEY_ID = "family-key";
 const DATA_SALT = "cuidados-mama-family-key-v2";
 const PBKDF2_ITERATIONS = 310000;
 
@@ -13,6 +16,7 @@ const initialState = {
   },
   appointments: [],
   careEntries: [],
+  medications: [],
 };
 
 let state = cloneInitialState();
@@ -56,6 +60,16 @@ const ids = {
   careMonthFilter: document.querySelector("#careMonthFilter"),
   careStatusFilter: document.querySelector("#careStatusFilter"),
   clearCareForm: document.querySelector("#clearCareForm"),
+  medicationForm: document.querySelector("#medicationForm"),
+  medicationId: document.querySelector("#medicationId"),
+  medicationName: document.querySelector("#medicationName"),
+  medicationPills: document.querySelector("#medicationPills"),
+  medicationMoment: document.querySelector("#medicationMoment"),
+  medicationTime: document.querySelector("#medicationTime"),
+  medicationNotes: document.querySelector("#medicationNotes"),
+  medicationList: document.querySelector("#medicationList"),
+  medicationFilter: document.querySelector("#medicationFilter"),
+  clearMedicationForm: document.querySelector("#clearMedicationForm"),
   summaryMonth: document.querySelector("#summaryMonth"),
   summaryRows: document.querySelector("#summaryRows"),
   summaryHours: document.querySelector("#summaryHours"),
@@ -78,8 +92,8 @@ const ids = {
   unlockButton: document.querySelector("#unlockButton"),
   lockHint: document.querySelector("#lockHint"),
   familyPassword: document.querySelector("#familyPassword"),
-  confirmPasswordWrap: document.querySelector("#confirmPasswordWrap"),
-  confirmFamilyPassword: document.querySelector("#confirmFamilyPassword"),
+  lockSyncTokenWrap: document.querySelector("#lockSyncTokenWrap"),
+  lockSyncToken: document.querySelector("#lockSyncToken"),
   syncUrl: document.querySelector("#syncUrl"),
   syncToken: document.querySelector("#syncToken"),
   syncNow: document.querySelector("#syncNow"),
@@ -89,11 +103,11 @@ const ids = {
 
 setup();
 
-function setup() {
+async function setup() {
   document.body.classList.add("locked");
   setupPasswordToggles();
-  setupLockScreen();
   registerServiceWorker();
+  await setupLockScreen();
 }
 
 function setupPasswordToggles() {
@@ -117,6 +131,7 @@ function setupApp() {
   ids.appointmentDate.value = toDateValue(today);
   ids.careDate.value = toDateValue(today);
   ids.careRate.value = state.settings.defaultRate;
+  ids.medicationPills.value = "1";
   ids.caregiverName.value = state.settings.caregiverName;
   ids.defaultRate.value = state.settings.defaultRate;
   ids.syncUrl.value = state.settings.syncUrl || "";
@@ -125,12 +140,15 @@ function setupApp() {
   ids.tabs.forEach((tab) => tab.addEventListener("click", () => activateTab(tab.dataset.tab)));
   ids.appointmentForm.addEventListener("submit", saveAppointment);
   ids.careForm.addEventListener("submit", saveCareEntry);
+  ids.medicationForm.addEventListener("submit", saveMedication);
   ids.settingsForm.addEventListener("submit", saveSettings);
   ids.clearAppointmentForm.addEventListener("click", resetAppointmentForm);
   ids.clearCareForm.addEventListener("click", resetCareForm);
+  ids.clearMedicationForm.addEventListener("click", resetMedicationForm);
   ids.appointmentFilter.addEventListener("change", render);
   ids.careMonthFilter.addEventListener("change", render);
   ids.careStatusFilter.addEventListener("change", render);
+  ids.medicationFilter.addEventListener("change", render);
   ids.summaryMonth.addEventListener("change", render);
   ids.exportData.addEventListener("click", exportData);
   ids.importData.addEventListener("change", importData);
@@ -146,27 +164,44 @@ function setupApp() {
   autoSync();
 }
 
-function setupLockScreen() {
+async function setupLockScreen() {
   const hasPassword = Boolean(localStorage.getItem(SECURE_META_KEY));
-  ids.lockTitle.textContent = hasPassword ? "Clave familiar" : "Crear clave familiar";
+  if (hasPassword) {
+    const rememberedKey = await loadRememberedKey();
+    if (rememberedKey) {
+      try {
+        await verifyPassword(rememberedKey);
+        familyKey = rememberedKey;
+        state = await loadSecureState(familyKey);
+        setupApp();
+        return;
+      } catch {
+        await forgetRememberedKey();
+        familyKey = null;
+      }
+    }
+  }
+
+  ids.lockTitle.textContent = "Clave familiar";
   ids.lockText.textContent = hasPassword
     ? "Introduce la clave familiar para descifrar los datos de este dispositivo."
-    : "Crea una clave de al menos 8 caracteres. Tu hermano deberá usar la misma.";
-  ids.unlockButton.textContent = hasPassword ? "Entrar" : "Crear y entrar";
-  ids.confirmPasswordWrap.hidden = hasPassword;
-  ids.confirmFamilyPassword.required = !hasPassword;
+    : "Introduce la clave familiar y el código privado para conectar este dispositivo.";
+  ids.unlockButton.textContent = "Entrar";
+  ids.lockSyncTokenWrap.hidden = hasPassword;
+  ids.lockSyncToken.required = !hasPassword;
 
   ids.unlockForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const password = ids.familyPassword.value;
+    const syncToken = ids.lockSyncToken.value.trim();
 
     if (!window.crypto?.subtle) {
       alert("Este navegador no permite cifrado seguro. Abre la app desde una dirección HTTPS privada.");
       return;
     }
 
-    if (!hasPassword && password !== ids.confirmFamilyPassword.value) {
-      alert("Las claves no coinciden.");
+    if (!hasPassword && !syncToken) {
+      alert("Introduce el código privado de sincronización.");
       return;
     }
 
@@ -176,16 +211,17 @@ function setupLockScreen() {
         await verifyPassword(familyKey);
         state = await loadSecureState(familyKey);
       } else {
-        state = loadLegacyState();
+        state = await loadSharedStateFromServer(familyKey, syncToken);
         await createPasswordVerifier(familyKey);
         await persist();
         localStorage.removeItem(STORAGE_KEY);
       }
+      await rememberKey(familyKey);
       ids.familyPassword.value = "";
-      ids.confirmFamilyPassword.value = "";
+      ids.lockSyncToken.value = "";
       setupApp();
-    } catch {
-      alert("No se pudo abrir la app. Revisa la clave familiar.");
+    } catch (error) {
+      alert(error.message || "No se pudo abrir la app. Revisa la clave familiar.");
     }
   });
 }
@@ -235,6 +271,28 @@ async function saveCareEntry(event) {
   render();
 }
 
+async function saveMedication(event) {
+  event.preventDefault();
+  const existing = state.medications.find((entry) => entry.id === ids.medicationId.value);
+  const entry = {
+    id: ids.medicationId.value || crypto.randomUUID(),
+    name: ids.medicationName.value.trim(),
+    pills: Number(ids.medicationPills.value || 0),
+    moment: ids.medicationMoment.value,
+    time: ids.medicationTime.value,
+    notes: ids.medicationNotes.value.trim(),
+    startedAt: existing?.startedAt || new Date().toISOString(),
+    endedAt: existing?.endedAt || "",
+    updatedAt: new Date().toISOString(),
+  };
+
+  state.medications = upsert(state.medications, entry);
+  await persist();
+  autoSync();
+  resetMedicationForm();
+  render();
+}
+
 async function saveSettings(event) {
   event.preventDefault();
   state.settings = {
@@ -252,6 +310,7 @@ async function saveSettings(event) {
 function render() {
   renderAppointments();
   renderCareEntries();
+  renderMedications();
   renderSummary();
   renderTopSummary();
 }
@@ -290,6 +349,7 @@ function renderAppointments() {
         </div>
         ${item.place ? `<div class="record-meta">${escapeHtml(item.place)}</div>` : ""}
         ${item.notes ? `<div class="record-notes">${escapeHtml(item.notes)}</div>` : ""}
+        ${item.place ? renderMapActions(item.place) : ""}
       </div>
       <div class="record-actions">
         <button class="secondary" type="button" data-action="edit" data-id="${safeId}">Editar</button>
@@ -299,6 +359,59 @@ function renderAppointments() {
     node.querySelector('[data-action="edit"]').addEventListener("click", () => editAppointment(item.id));
     node.querySelector('[data-action="delete"]').addEventListener("click", () => deleteAppointment(item.id));
     ids.appointmentList.append(node);
+  });
+}
+
+function renderMedications() {
+  const today = startOfDay(new Date());
+  const oneYearAgo = addYears(today, -1);
+  const filter = ids.medicationFilter.value;
+  let medications = activeItems(state.medications).sort((a, b) => itemTimestamp(b) - itemTimestamp(a));
+
+  if (filter === "active") {
+    medications = medications.filter((item) => !item.endedAt);
+  }
+  if (filter === "historyYear") {
+    medications = medications.filter((item) => {
+      const date = new Date(item.endedAt || item.updatedAt || item.startedAt);
+      return date >= oneYearAgo && date <= new Date();
+    });
+  }
+
+  ids.medicationList.innerHTML = "";
+  if (!medications.length) {
+    ids.medicationList.append(emptyState());
+    return;
+  }
+
+  medications.forEach((item) => {
+    const node = document.createElement("article");
+    node.className = "record";
+    const safeId = escapeHtml(item.id);
+    node.innerHTML = `
+      <div class="record-main">
+        <div class="record-title">
+          <span>${escapeHtml(item.name)}</span>
+          <span class="pill">${escapeHtml(formatPills(item.pills))}</span>
+          <span class="pill">${escapeHtml(formatMedicationMoment(item))}</span>
+          ${item.endedAt ? '<span class="pill">Suspendida</span>' : '<span class="pill">Activa</span>'}
+        </div>
+        ${item.notes ? `<div class="record-notes">${escapeHtml(item.notes)}</div>` : ""}
+      </div>
+      <div class="record-actions">
+        ${
+          item.endedAt
+            ? ""
+            : `<button class="secondary" type="button" data-action="stop" data-id="${safeId}">Suspender</button>`
+        }
+        <button class="secondary" type="button" data-action="edit" data-id="${safeId}">Editar</button>
+        <button class="danger" type="button" data-action="delete" data-id="${safeId}">Borrar</button>
+      </div>
+    `;
+    node.querySelector('[data-action="stop"]')?.addEventListener("click", () => stopMedication(item.id));
+    node.querySelector('[data-action="edit"]').addEventListener("click", () => editMedication(item.id));
+    node.querySelector('[data-action="delete"]').addEventListener("click", () => deleteMedication(item.id));
+    ids.medicationList.append(node);
   });
 }
 
@@ -419,9 +532,41 @@ function editCareEntry(id) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
+function editMedication(id) {
+  const item = state.medications.find((entry) => entry.id === id);
+  if (!item) return;
+  ids.medicationId.value = item.id;
+  ids.medicationName.value = item.name;
+  ids.medicationPills.value = item.pills;
+  ids.medicationMoment.value = item.moment;
+  ids.medicationTime.value = item.time || "";
+  ids.medicationNotes.value = item.notes;
+  activateTab("medication");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
 async function deleteAppointment(id) {
   if (!confirm("¿Borrar esta cita?")) return;
   state.appointments = state.appointments.map((entry) =>
+    entry.id === id ? { ...entry, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : entry,
+  );
+  await persist();
+  autoSync();
+  render();
+}
+
+async function stopMedication(id) {
+  state.medications = state.medications.map((entry) =>
+    entry.id === id ? { ...entry, endedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : entry,
+  );
+  await persist();
+  autoSync();
+  render();
+}
+
+async function deleteMedication(id) {
+  if (!confirm("¿Borrar esta medicación?")) return;
+  state.medications = state.medications.map((entry) =>
     entry.id === id ? { ...entry, deletedAt: new Date().toISOString(), updatedAt: new Date().toISOString() } : entry,
   );
   await persist();
@@ -459,6 +604,12 @@ function resetCareForm() {
   ids.careId.value = "";
   ids.careDate.value = toDateValue(new Date());
   ids.careRate.value = state.settings.defaultRate;
+}
+
+function resetMedicationForm() {
+  ids.medicationForm.reset();
+  ids.medicationId.value = "";
+  ids.medicationPills.value = "1";
 }
 
 function entriesForMonth(month) {
@@ -568,6 +719,7 @@ function normalizeState(imported) {
     settings: normalizeSettings(imported.settings || {}),
     appointments: Array.isArray(imported.appointments) ? imported.appointments.map(normalizeAppointment) : [],
     careEntries: Array.isArray(imported.careEntries) ? imported.careEntries.map(normalizeCareEntry) : [],
+    medications: Array.isArray(imported.medications) ? imported.medications.map(normalizeMedication) : [],
   };
 }
 
@@ -608,6 +760,21 @@ function normalizeCareEntry(item) {
   };
 }
 
+function normalizeMedication(item) {
+  return {
+    id: cleanId(item.id),
+    name: cleanText(item.name, 140),
+    pills: cleanNumber(item.pills),
+    moment: cleanMedicationMoment(item.moment),
+    time: cleanTime(item.time),
+    notes: cleanText(item.notes, 1200),
+    startedAt: cleanIsoDate(item.startedAt) || cleanIsoDate(item.updatedAt) || new Date().toISOString(),
+    endedAt: cleanIsoDate(item.endedAt),
+    updatedAt: cleanIsoDate(item.updatedAt),
+    deletedAt: cleanIsoDate(item.deletedAt),
+  };
+}
+
 function cleanId(value) {
   const id = cleanText(value, 80);
   return id || crypto.randomUUID();
@@ -621,6 +788,10 @@ function cleanDate(value) {
 function cleanTime(value) {
   const text = cleanText(value, 5);
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(text) ? text : "";
+}
+
+function cleanMedicationMoment(value) {
+  return ["desayuno", "mediaManana", "comida", "mediaTarde", "cena", "hora"].includes(value) ? value : "desayuno";
 }
 
 function cleanNumber(value) {
@@ -670,6 +841,56 @@ async function loadSecureState(key) {
   return normalizeState(await decryptJson(key, JSON.parse(raw)));
 }
 
+async function loadSharedStateFromServer(key, syncToken) {
+  const syncUrl = initialState.settings.syncUrl;
+  if (location.protocol === "file:") {
+    throw new Error(
+      "Firefox ha abierto la app como archivo local. Para sincronizar y entrar por primera vez, abre la dirección privada de la app con https:// o desde el servidor instalado.",
+    );
+  }
+
+  let response;
+  try {
+    response = await fetch(syncUrl, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${syncToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ action: "pull" }),
+      cache: "no-store",
+    });
+  } catch {
+    throw new Error(
+      "No se pudo conectar con la sincronización privada. Abre la app desde su dirección HTTPS privada y revisa que el servidor esté activo.",
+    );
+  }
+
+  if (response.status === 401) {
+    throw new Error("El código privado de sincronización no coincide.");
+  }
+  if (!response.ok) {
+    throw new Error(`No se pudo comprobar la clave familiar. El servidor respondió ${response.status}.`);
+  }
+
+  const payload = await response.json();
+  if (!payload?.encrypted) {
+    const firstState = loadLegacyState();
+    firstState.settings.syncUrl = syncUrl;
+    firstState.settings.syncToken = syncToken;
+    return firstState;
+  }
+
+  try {
+    const sharedState = normalizeState(await decryptJson(key, payload.encrypted));
+    sharedState.settings.syncUrl = syncUrl;
+    sharedState.settings.syncToken = syncToken;
+    return sharedState;
+  } catch {
+    throw new Error("La clave familiar no coincide con la clave ya creada.");
+  }
+}
+
 async function encryptJson(key, value) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = textBytes(JSON.stringify(value));
@@ -693,11 +914,67 @@ async function decryptJson(key, payload) {
   return JSON.parse(new TextDecoder().decode(decrypted));
 }
 
+async function rememberKey(key) {
+  try {
+    const db = await openRememberDb();
+    await rememberDbRequest(db.transaction(REMEMBER_STORE_NAME, "readwrite").objectStore(REMEMBER_STORE_NAME).put(key, REMEMBER_KEY_ID));
+    db.close();
+  } catch {
+    localStorage.removeItem("mama-care-remembered");
+  }
+}
+
+async function loadRememberedKey() {
+  try {
+    const db = await openRememberDb();
+    const key = await rememberDbRequest(db.transaction(REMEMBER_STORE_NAME, "readonly").objectStore(REMEMBER_STORE_NAME).get(REMEMBER_KEY_ID));
+    db.close();
+    return key || null;
+  } catch {
+    return null;
+  }
+}
+
+async function forgetRememberedKey() {
+  try {
+    const db = await openRememberDb();
+    await rememberDbRequest(db.transaction(REMEMBER_STORE_NAME, "readwrite").objectStore(REMEMBER_STORE_NAME).delete(REMEMBER_KEY_ID));
+    db.close();
+  } catch {
+    return;
+  }
+}
+
+function openRememberDb() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB no disponible"));
+      return;
+    }
+    const request = indexedDB.open(REMEMBER_DB_NAME, 1);
+    request.onupgradeneeded = () => request.result.createObjectStore(REMEMBER_STORE_NAME);
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function rememberDbRequest(request) {
+  return new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
 async function syncNow() {
   const syncUrl = state.settings.syncUrl;
   const syncToken = state.settings.syncToken;
   if (!syncUrl || !syncToken) {
     ids.syncStatus.textContent = "Sincronización privada no configurada.";
+    return;
+  }
+  if (location.protocol === "file:") {
+    ids.syncStatus.textContent =
+      "No se puede sincronizar si la app está abierta como archivo local. Abre la dirección HTTPS privada de la app.";
     return;
   }
 
@@ -815,6 +1092,7 @@ function mergeStates(localState, remoteState) {
     },
     appointments: mergeById(localState.appointments, remoteState.appointments),
     careEntries: mergeById(localState.careEntries, remoteState.careEntries),
+    medications: mergeById(localState.medications, remoteState.medications),
   });
 }
 
@@ -833,7 +1111,8 @@ function itemTimestamp(item) {
   return Date.parse(item.updatedAt || item.deletedAt || "1970-01-01T00:00:00.000Z") || 0;
 }
 
-function lockApp() {
+async function lockApp() {
+  await forgetRememberedKey();
   familyKey = null;
   window.location.reload();
 }
@@ -891,6 +1170,40 @@ function formatDate(value) {
 
 function formatHours(value) {
   return `${value.toLocaleString("es-ES", { minimumFractionDigits: value % 1 ? 2 : 0, maximumFractionDigits: 2 })} h`;
+}
+
+function formatPills(value) {
+  return `${value.toLocaleString("es-ES", { maximumFractionDigits: 2 })} ${value === 1 ? "pastilla" : "pastillas"}`;
+}
+
+function formatMedicationMoment(item) {
+  const labels = {
+    desayuno: "Desayuno",
+    mediaManana: "Media mañana",
+    comida: "Comida",
+    mediaTarde: "Media tarde",
+    cena: "Cena",
+    hora: "Hora concreta",
+  };
+  return item.time ? `${labels[item.moment] || "Hora"} · ${item.time}` : labels[item.moment] || "Desayuno";
+}
+
+function renderMapActions(place) {
+  const destination = encodeURIComponent(place);
+  const searchUrl = `https://www.google.com/maps/search/?api=1&query=${destination}`;
+  const directionsUrl = `https://www.google.com/maps/dir/?api=1&destination=${destination}&travelmode=driving`;
+  return `
+    <div class="map-card">
+      <div>
+        <strong>Mapa y ruta</strong>
+        <span>${escapeHtml(place)}</span>
+      </div>
+      <div class="map-actions">
+        <a class="secondary button-link" href="${searchUrl}" target="_blank" rel="noopener noreferrer">Ver en Maps</a>
+        <a class="primary button-link" href="${directionsUrl}" target="_blank" rel="noopener noreferrer">Cómo llegar</a>
+      </div>
+    </div>
+  `;
 }
 
 function emptyState() {

@@ -30,11 +30,11 @@
             <button class="password-toggle" type="button" data-toggle-password="familyPassword" aria-label="Mostrar clave">Ver</button>
           </span>
         </label>
-        <label id="confirmPasswordWrap">
-          Repetir clave
+        <label id="lockSyncTokenWrap" hidden>
+          Código privado de sincronización
           <span class="password-field">
-            <input id="confirmFamilyPassword" type="password" minlength="8" autocomplete="new-password" />
-            <button class="password-toggle" type="button" data-toggle-password="confirmFamilyPassword" aria-label="Mostrar clave repetida">Ver</button>
+            <input id="lockSyncToken" type="password" autocomplete="off" />
+            <button class="password-toggle" type="button" data-toggle-password="lockSyncToken" aria-label="Mostrar código privado">Ver</button>
           </span>
         </label>
         <button class="primary" type="submit" id="unlockButton">Entrar</button>
@@ -56,10 +56,19 @@
           <input id="importData" type="file" accept="application/json" />
         </label>
         <button class="icon-button" id="printPage" title="Imprimir resumen" type="button" aria-label="Imprimir resumen">
-          <span aria-hidden="true">⌁</span>
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M6 9V3h12v6" />
+            <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+            <path d="M6 14h12v7H6z" />
+            <path d="M18 12h.01" />
+          </svg>
         </button>
-        <button class="icon-button" id="lockApp" title="Bloquear app" type="button" aria-label="Bloquear app">
-          <span aria-hidden="true">□</span>
+        <button class="icon-button" id="lockApp" title="Desconectar este dispositivo" type="button" aria-label="Desconectar este dispositivo">
+          <svg aria-hidden="true" viewBox="0 0 24 24">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+            <path d="M16 17l5-5-5-5" />
+            <path d="M21 12H9" />
+          </svg>
         </button>
       </div>
     </header>
@@ -83,6 +92,7 @@
       <nav class="tabs" aria-label="Secciones">
         <button class="tab active" type="button" data-tab="appointments">Citas médicas</button>
         <button class="tab" type="button" data-tab="care">Cuidadora</button>
+        <button class="tab" type="button" data-tab="medication">Medicación</button>
         <button class="tab" type="button" data-tab="monthly">Resumen mensual</button>
         <button class="tab" type="button" data-tab="settings">Ajustes</button>
       </nav>
@@ -174,6 +184,52 @@
           </div>
         </div>
         <div class="item-list" id="careList"></div>
+      </section>
+
+      <section class="panel" id="medication">
+        <form class="entry-form" id="medicationForm">
+          <input type="hidden" id="medicationId" />
+          <label>
+            Medicamento
+            <input id="medicationName" type="text" placeholder="Nombre del medicamento" required />
+          </label>
+          <label>
+            Pastillas
+            <input id="medicationPills" type="number" min="0" step="0.25" required />
+          </label>
+          <label>
+            Momento del día
+            <select id="medicationMoment" required>
+              <option value="desayuno">Desayuno</option>
+              <option value="mediaManana">Media mañana</option>
+              <option value="comida">Comida</option>
+              <option value="mediaTarde">Media tarde</option>
+              <option value="cena">Cena</option>
+              <option value="hora">Hora concreta</option>
+            </select>
+          </label>
+          <label>
+            Hora
+            <input id="medicationTime" type="time" />
+          </label>
+          <label class="wide">
+            Notas
+            <textarea id="medicationNotes" rows="2" placeholder="Indicaciones, duración, cambios de dosis..."></textarea>
+          </label>
+          <div class="form-actions wide">
+            <button class="primary" type="submit">Guardar medicación</button>
+            <button class="secondary" id="clearMedicationForm" type="button">Limpiar</button>
+          </div>
+        </form>
+        <div class="list-header">
+          <h2>Medicación guardada</h2>
+          <select id="medicationFilter" aria-label="Filtro de medicación">
+            <option value="active">Activa</option>
+            <option value="historyYear">Historial último año</option>
+            <option value="all">Todas</option>
+          </select>
+        </div>
+        <div class="item-list" id="medicationList"></div>
       </section>
 
       <section class="panel" id="monthly">
