@@ -67,6 +67,7 @@ const ids = {
   medicationMoment: document.querySelector("#medicationMoment"),
   medicationTime: document.querySelector("#medicationTime"),
   medicationNotes: document.querySelector("#medicationNotes"),
+  medicationSummary: document.querySelector("#medicationSummary"),
   medicationList: document.querySelector("#medicationList"),
   medicationFilter: document.querySelector("#medicationFilter"),
   clearMedicationForm: document.querySelector("#clearMedicationForm"),
@@ -363,6 +364,7 @@ function renderAppointments() {
 }
 
 function renderMedications() {
+  renderMedicationSummary();
   const today = startOfDay(new Date());
   const oneYearAgo = addYears(today, -1);
   const filter = ids.medicationFilter.value;
@@ -413,6 +415,42 @@ function renderMedications() {
     node.querySelector('[data-action="delete"]').addEventListener("click", () => deleteMedication(item.id));
     ids.medicationList.append(node);
   });
+}
+
+function renderMedicationSummary() {
+  const moments = medicationMoments();
+  const activeMedications = activeItems(state.medications)
+    .filter((item) => !item.endedAt)
+    .sort((a, b) => medicationSortValue(a) - medicationSortValue(b) || a.name.localeCompare(b.name, "es"));
+  const grouped = moments.map((moment) => ({
+    ...moment,
+    items: activeMedications.filter((item) => item.moment === moment.value),
+  }));
+
+  ids.medicationSummary.innerHTML = grouped
+    .map(
+      (group) => `
+        <article class="medication-column">
+          <h3>${escapeHtml(group.label)}</h3>
+          ${
+            group.items.length
+              ? `<ul>${group.items.map((item) => renderMedicationSummaryItem(item)).join("")}</ul>`
+              : '<span class="empty-medication">-</span>'
+          }
+        </article>
+      `,
+    )
+    .join("");
+}
+
+function renderMedicationSummaryItem(item) {
+  const details = [formatPills(item.pills), item.time].filter(Boolean).join(" · ");
+  return `
+    <li>
+      <strong>${escapeHtml(item.name)}</strong>
+      <span>${escapeHtml(details)}</span>
+    </li>
+  `;
 }
 
 function renderCareEntries() {
@@ -1177,15 +1215,25 @@ function formatPills(value) {
 }
 
 function formatMedicationMoment(item) {
-  const labels = {
-    desayuno: "Desayuno",
-    mediaManana: "Media mañana",
-    comida: "Comida",
-    mediaTarde: "Media tarde",
-    cena: "Cena",
-    hora: "Hora concreta",
-  };
+  const labels = Object.fromEntries(medicationMoments().map((moment) => [moment.value, moment.label]));
   return item.time ? `${labels[item.moment] || "Hora"} · ${item.time}` : labels[item.moment] || "Desayuno";
+}
+
+function medicationMoments() {
+  return [
+    { value: "desayuno", label: "Desayuno" },
+    { value: "mediaManana", label: "Media mañana" },
+    { value: "comida", label: "Comida" },
+    { value: "mediaTarde", label: "Media tarde" },
+    { value: "cena", label: "Cena" },
+    { value: "hora", label: "Hora concreta" },
+  ];
+}
+
+function medicationSortValue(item) {
+  const momentIndex = medicationMoments().findIndex((moment) => moment.value === item.moment);
+  const timeValue = item.time ? minutes(item.time) / 1440 : 0;
+  return (momentIndex === -1 ? 99 : momentIndex) + timeValue;
 }
 
 function renderMapActions(place) {
